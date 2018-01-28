@@ -65,8 +65,8 @@ int main()
         puts("Could not find file");
         return EXIT_FAILURE;
     }
-
-    if ( !tje_encode_to_file("out.jpg", width, height, num_components, data) ) {
+	bool rgb=true;
+    if ( !tje_encode_to_file("out.jpg", width, height, num_components,rgb,data) ) {
         fprintf(stderr, "Could not write JPEG\n");
         return EXIT_FAILURE;
     }
@@ -74,9 +74,10 @@ int main()
     return EXIT_SUCCESS;
 }
 
-*/
-
-
+*/ 
+#if defined(_MSC_VER) && (_MSC_VER >= 1310) /*Visual Studio: A few warning types are not desired here.*/
+#pragma warning( disable : 4996 ) /*VS does not like fopen, but fopen_s is not standard C so unusable here*/
+#endif /*_MSC_VER */
 
 #ifdef __cplusplus
 extern "C"
@@ -97,6 +98,10 @@ extern "C"
 #ifndef TJE_HEADER_GUARD
 #define TJE_HEADER_GUARD
 
+#ifndef ENABLE_FOPEN
+#define ENABLE_FOPEN	1
+#endif
+
 // - tje_encode_to_file -
 //
 // Usage:
@@ -110,12 +115,14 @@ extern "C"
 //
 //  RETURN:
 //      0 on error. 1 on success.
-
+#if ENABLE_FOPEN==1
 int tje_encode_to_file(const char* dest_path,
                        const int width,
                        const int height,
                        const int num_components,
+					   bool Rgb,
                        const unsigned char* src_data);
+#endif
 
 // - tje_encode_to_file_at_quality -
 //
@@ -133,14 +140,15 @@ int tje_encode_to_file(const char* dest_path,
 //
 //  RETURN:
 //      0 on error. 1 on success.
-
+#if ENABLE_FOPEN==1
 int tje_encode_to_file_at_quality(const char* dest_path,
                                   const int quality,
                                   const int width,
                                   const int height,
                                   const int num_components,
+								  bool Rgb,
                                   const unsigned char* src_data);
-
+#endif
 // - tje_encode_with_func -
 //
 // Usage
@@ -157,6 +165,7 @@ int tje_encode_with_func(tje_write_func* func,
                          const int width,
                          const int height,
                          const int num_components,
+						 bool Rgb,
                          const unsigned char* src_data);
 
 #endif // TJE_HEADER_GUARD
@@ -172,8 +181,8 @@ int tje_encode_with_func(tje_write_func* func,
 #ifdef TJE_IMPLEMENTATION
 
 
-#define tjei_min(a, b) ((a) < b) ? (a) : (b);
-#define tjei_max(a, b) ((a) < b) ? (b) : (a);
+#define tjei_min(a, b) ((a) < b) ? (a) : (b)
+#define tjei_max(a, b) ((a) < b) ? (b) : (a)
 
 
 #if defined(_MSC_VER)
@@ -637,125 +646,128 @@ TJEI_FORCE_INLINE void tjei_write_bits(TJEState* state,
     }
 }
 
-// DCT implementation by Thomas G. Lane.
-// Obtained through NVIDIA
-//  http://developer.download.nvidia.com/SDK/9.5/Samples/vidimaging_samples.html#gpgpu_dct
-//
-// QUOTE:
-//  This implementation is based on Arai, Agui, and Nakajima's algorithm for
-//  scaled DCT.  Their original paper (Trans. IEICE E-71(11):1095) is in
-//  Japanese, but the algorithm is described in the Pennebaker & Mitchell
-//  JPEG textbook (see REFERENCES section in file README).  The following code
-//  is based directly on figure 4-8 in P&M.
-//
-static void tjei_fdct (float * data)
-{
-    float tmp0, tmp1, tmp2, tmp3, tmp4, tmp5, tmp6, tmp7;
-    float tmp10, tmp11, tmp12, tmp13;
-    float z1, z2, z3, z4, z5, z11, z13;
-    float *dataptr;
-    int ctr;
 
-    /* Pass 1: process rows. */
+	// DCT implementation by Thomas G. Lane.
+	// Obtained through NVIDIA
+	//  http://developer.download.nvidia.com/SDK/9.5/Samples/vidimaging_samples.html#gpgpu_dct
+	//
+	// QUOTE:
+	//  This implementation is based on Arai, Agui, and Nakajima's algorithm for
+	//  scaled DCT.  Their original paper (Trans. IEICE E-71(11):1095) is in
+	//  Japanese, but the algorithm is described in the Pennebaker & Mitchell
+	//  JPEG textbook (see REFERENCES section in file README).  The following code
+	//  is based directly on figure 4-8 in P&M.
+	//
+	static void tjei_fdct(float * data)
+	{
+		float X07P, X16P, X25P, X34P, X34M, X25M, X16M, X07M;
+		float X07P34PP, X16P25PP, X16P25PM, X07P34PM;
+		float z1, z2, z3, z4, z5, z11, z13;
+		float *In;
+		int ctr;
 
-    dataptr = data;
-    for ( ctr = 7; ctr >= 0; ctr-- ) {
-        tmp0 = dataptr[0] + dataptr[7];
-        tmp7 = dataptr[0] - dataptr[7];
-        tmp1 = dataptr[1] + dataptr[6];
-        tmp6 = dataptr[1] - dataptr[6];
-        tmp2 = dataptr[2] + dataptr[5];
-        tmp5 = dataptr[2] - dataptr[5];
-        tmp3 = dataptr[3] + dataptr[4];
-        tmp4 = dataptr[3] - dataptr[4];
+		/* Pass 1: process rows. */
 
-        /* Even part */
+		In = data;
+		for (ctr = 7; ctr >= 0; ctr--) {
+			X07P = In[0] + In[7];
+			X07M = In[0] - In[7];
+			X16P = In[1] + In[6];
+			X16M = In[1] - In[6];
+			X25P = In[2] + In[5];
+			X25M = In[2] - In[5];
+			X34P = In[3] + In[4];
+			X34M = In[3] - In[4];
 
-        tmp10 = tmp0 + tmp3;    /* phase 2 */
-        tmp13 = tmp0 - tmp3;
-        tmp11 = tmp1 + tmp2;
-        tmp12 = tmp1 - tmp2;
+			/* Even part */
 
-        dataptr[0] = tmp10 + tmp11; /* phase 3 */
-        dataptr[4] = tmp10 - tmp11;
+			X07P34PP = X07P + X34P;    /* phase 2 */
+			X07P34PM = X07P - X34P;
+			X16P25PP = X16P + X25P;
+			X16P25PM = X16P - X25P;
 
-        z1 = (tmp12 + tmp13) * ((float) 0.707106781); /* c4 */
-        dataptr[2] = tmp13 + z1;    /* phase 5 */
-        dataptr[6] = tmp13 - z1;
+			In[0] = X07P34PP + X16P25PP; /* phase 3 */
+			In[4] = X07P34PP - X16P25PP;
 
-        /* Odd part */
+			z1 = (X16P25PM + X07P34PM) * ((float) 0.707106781f); /* c4 */
+			In[2] = X07P34PM + z1;    /* phase 5 */
+			In[6] = X07P34PM - z1;
 
-        tmp10 = tmp4 + tmp5;    /* phase 2 */
-        tmp11 = tmp5 + tmp6;
-        tmp12 = tmp6 + tmp7;
+			/* Odd part */
 
-        /* The rotator is modified from fig 4-8 to avoid extra negations. */
-        z5 = (tmp10 - tmp12) * ((float) 0.382683433); /* c6 */
-        z2 = ((float) 0.541196100) * tmp10 + z5; /* c2-c6 */
-        z4 = ((float) 1.306562965) * tmp12 + z5; /* c2+c6 */
-        z3 = tmp11 * ((float) 0.707106781); /* c4 */
+			X07P34PP = X34M + X25M;    /* phase 2 */
+			X16P25PP = X25M + X16M;
+			X16P25PM = X16M + X07M;
 
-        z11 = tmp7 + z3;        /* phase 5 */
-        z13 = tmp7 - z3;
+			/* The rotator is modified from fig 4-8 to avoid extra negations. */
+			z5 = (X07P34PP - X16P25PM) * ((float) 0.382683433f); /* c6 */
+			z2 = ((float) 0.541196100f) * X07P34PP + z5; /* c2-c6 */
+			z4 = ((float) 1.306562965f) * X16P25PM + z5; /* c2+c6 */
+			z3 = X16P25PP * ((float) 0.707106781f); /* c4 */
 
-        dataptr[5] = z13 + z2;  /* phase 6 */
-        dataptr[3] = z13 - z2;
-        dataptr[1] = z11 + z4;
-        dataptr[7] = z11 - z4;
+			z11 = X07M + z3;        /* phase 5 */
+			z13 = X07M - z3;
 
-        dataptr += 8;     /* advance pointer to next row */
-    }
+			In[5] = z13 + z2;  /* phase 6 */
+			In[3] = z13 - z2;
+			In[1] = z11 + z4;
+			In[7] = z11 - z4;
 
-    /* Pass 2: process columns. */
+			In += 8;     /* advance pointer to next row */
+		}
 
-    dataptr = data;
-    for ( ctr = 8-1; ctr >= 0; ctr-- ) {
-        tmp0 = dataptr[8*0] + dataptr[8*7];
-        tmp7 = dataptr[8*0] - dataptr[8*7];
-        tmp1 = dataptr[8*1] + dataptr[8*6];
-        tmp6 = dataptr[8*1] - dataptr[8*6];
-        tmp2 = dataptr[8*2] + dataptr[8*5];
-        tmp5 = dataptr[8*2] - dataptr[8*5];
-        tmp3 = dataptr[8*3] + dataptr[8*4];
-        tmp4 = dataptr[8*3] - dataptr[8*4];
+		/* Pass 2: process columns. */
 
-        /* Even part */
+		In = data;
+		for (ctr = 8 - 1; ctr >= 0; ctr--) {
+			X07P = In[8 * 0] + In[8 * 7];
+			X07M = In[8 * 0] - In[8 * 7];
+			X16P = In[8 * 1] + In[8 * 6];
+			X16M = In[8 * 1] - In[8 * 6];
+			X25P = In[8 * 2] + In[8 * 5];
+			X25M = In[8 * 2] - In[8 * 5];
+			X34P = In[8 * 3] + In[8 * 4];
+			X34M = In[8 * 3] - In[8 * 4];
 
-        tmp10 = tmp0 + tmp3;    /* phase 2 */
-        tmp13 = tmp0 - tmp3;
-        tmp11 = tmp1 + tmp2;
-        tmp12 = tmp1 - tmp2;
+			/* Even part */
 
-        dataptr[8*0] = tmp10 + tmp11; /* phase 3 */
-        dataptr[8*4] = tmp10 - tmp11;
+			X07P34PP = X07P + X34P;    /* phase 2 */
+			X07P34PM = X07P - X34P;
+			X16P25PP = X16P + X25P;
+			X16P25PM = X16P - X25P;
 
-        z1 = (tmp12 + tmp13) * ((float) 0.707106781); /* c4 */
-        dataptr[8*2] = tmp13 + z1; /* phase 5 */
-        dataptr[8*6] = tmp13 - z1;
+			In[8 * 0] = X07P34PP + X16P25PP; /* phase 3 */
+			In[8 * 4] = X07P34PP - X16P25PP;
 
-        /* Odd part */
+			z1 = (X16P25PM + X07P34PM) * ((float) 0.707106781f); /* c4 */
+			In[8 * 2] = X07P34PM + z1; /* phase 5 */
+			In[8 * 6] = X07P34PM - z1;
 
-        tmp10 = tmp4 + tmp5;    /* phase 2 */
-        tmp11 = tmp5 + tmp6;
-        tmp12 = tmp6 + tmp7;
+			/* Odd part */
 
-        /* The rotator is modified from fig 4-8 to avoid extra negations. */
-        z5 = (tmp10 - tmp12) * ((float) 0.382683433); /* c6 */
-        z2 = ((float) 0.541196100) * tmp10 + z5; /* c2-c6 */
-        z4 = ((float) 1.306562965) * tmp12 + z5; /* c2+c6 */
-        z3 = tmp11 * ((float) 0.707106781); /* c4 */
+			X07P34PP = X34M + X25M;    /* phase 2 */
+			X16P25PP = X25M + X16M;
+			X16P25PM = X16M + X07M;
 
-        z11 = tmp7 + z3;        /* phase 5 */
-        z13 = tmp7 - z3;
+			/* The rotator is modified from fig 4-8 to avoid extra negations. */
+			z5 = (X07P34PP - X16P25PM) * ((float) 0.382683433f); /* c6 */
+			z2 = ((float) 0.541196100f) * X07P34PP + z5; /* c2-c6 */
+			z4 = ((float) 1.306562965f) * X16P25PM + z5; /* c2+c6 */
+			z3 = X16P25PP * ((float) 0.707106781f); /* c4 */
 
-        dataptr[8*5] = z13 + z2; /* phase 6 */
-        dataptr[8*3] = z13 - z2;
-        dataptr[8*1] = z11 + z4;
-        dataptr[8*7] = z11 - z4;
+			z11 = X07M + z3;        /* phase 5 */
+			z13 = X07M - z3;
 
-        dataptr++;          /* advance pointer to next column */
-    }
-}
+			In[8 * 5] = z13 + z2; /* phase 6 */
+			In[8 * 3] = z13 - z2;
+			In[8 * 1] = z11 + z4;
+			In[8 * 7] = z11 - z4;
+
+			In++;          /* advance pointer to next column */
+		}
+	}
+
+	 
 #if !TJE_USE_FAST_DCT
 static float slow_fdct(int u, int v, float* data)
 {
@@ -944,7 +956,8 @@ static int tjei_encode_main(TJEState* state,
                             const unsigned char* src_data,
                             const int width,
                             const int height,
-                            const int src_num_components)
+                            const int src_num_components,
+							bool Rgb)	//	else bgr
 {
     if (src_num_components != 3 && src_num_components != 4) {
         return 0;
@@ -973,12 +986,15 @@ static int tjei_encode_main(TJEState* state,
 
     // build (de)quantization tables
     for(int y=0; y<8; y++) {
-        for(int x=0; x<8; x++) {
-            int i = y*8 + x;
-            pqt.luma[y*8+x] = 1.0f / (8 * aan_scales[x] * aan_scales[y] * state->qt_luma[tjei_zig_zag[i]]);
-            pqt.chroma[y*8+x] = 1.0f / (8 * aan_scales[x] * aan_scales[y] * state->qt_chroma[tjei_zig_zag[i]]);
-        }
-    }
+			int line = y << 3;
+			float  aan_scales_y = 8 * aan_scales[y];
+			for (int x = 0; x < 8; x++) {
+				const	int i = (line)+x;
+				const uint8_t  &zag = tjei_zig_zag[i];
+				pqt.luma[i] = 1.0f / (aan_scales[x] * aan_scales_y* state->qt_luma[zag]);
+				pqt.chroma[i] = 1.0f / (aan_scales[x] * aan_scales_y * state->qt_chroma[zag]);
+			}
+		}
 #endif
 
     { // Write header
@@ -1085,42 +1101,32 @@ static int tjei_encode_main(TJEState* state,
     uint32_t bitbuffer = 0;
     uint32_t location = 0;
 
-
-    for ( int y = 0; y < height; y += 8 ) {
-        for ( int x = 0; x < width; x += 8 ) {
-            // Block loop: ====
-            for ( int off_y = 0; off_y < 8; ++off_y ) {
-                for ( int off_x = 0; off_x < 8; ++off_x ) {
-                    int block_index = (off_y * 8 + off_x);
-
-                    int src_index = (((y + off_y) * width) + (x + off_x)) * src_num_components;
-
-                    int col = x + off_x;
-                    int row = y + off_y;
-
-                    if(row >= height) {
-                        src_index -= (width * (row - height + 1)) * src_num_components;
-                    }
-                    if(col >= width) {
-                        src_index -= (col - width + 1) * src_num_components;
-                    }
-                    assert(src_index < width * height * src_num_components);
-
-                    uint8_t r = src_data[src_index + 0];
-                    uint8_t g = src_data[src_index + 1];
-                    uint8_t b = src_data[src_index + 2];
-
-                    float luma = 0.299f   * r + 0.587f    * g + 0.114f    * b - 128;
-                    float cb   = -0.1687f * r - 0.3313f   * g + 0.5f      * b;
-                    float cr   = 0.5f     * r - 0.4187f   * g - 0.0813f   * b;
-
-                    du_y[block_index] = luma;
-                    du_b[block_index] = cb;
-                    du_r[block_index] = cr;
-                }
-            }
-
-            tjei_encode_and_write_MCU(state, du_y,
+	int rgb_idx[3] = { 0,1,2 };
+	if (!Rgb)
+	{
+		rgb_idx[2] = 0;
+		rgb_idx[0] = 2;
+	}
+	for (int y = 0; y < height; y += 8)
+	{
+		for (int x = 0; x < width; x += 8)
+		{
+			// Block loop: ====
+			for (int off_y = 0; off_y < 8; ++off_y)
+			{
+				 for (int off_x = 0; off_x < 8; ++off_x)
+				{
+					int block_index = (off_y << 3) + off_x;
+				 	int src_index = (((y + off_y) * width) + (x + off_x)) * src_num_components;
+				 	const unsigned char& r = src_data[src_index + rgb_idx[0]];
+					const unsigned char& g = src_data[src_index + rgb_idx[1]];
+					const unsigned char &b = src_data[src_index + rgb_idx[2]];
+					du_y[block_index] = (float)(((19595 * r + 38470 * g + 7470 * b) >> 16) - 128);
+					du_b[block_index] = (float)((-11056 * r - 21712 * g + 32767 * b) >> 16);
+					du_r[block_index] = (float)((32767 * r - 27440 * g - 5328 * b) >> 16);
+				}
+			}
+				tjei_encode_and_write_MCU(state, du_y,
 #if TJE_USE_FAST_DCT
                                      pqt.luma,
 #else
@@ -1168,29 +1174,35 @@ static int tjei_encode_main(TJEState* state,
 
     return 1;
 }
-
+#if ENABLE_FOPEN==1
 int tje_encode_to_file(const char* dest_path,
                        const int width,
                        const int height,
                        const int num_components,
+					   bool Rgb,
                        const unsigned char* src_data)
 {
-    int res = tje_encode_to_file_at_quality(dest_path, 3, width, height, num_components, src_data);
+    int res = tje_encode_to_file_at_quality(dest_path, 3, width, height, num_components, Rgb, src_data);
     return res;
 }
+#endif
 
+#if ENABLE_FOPEN==1
 static void tjei_stdlib_func(void* context, void* data, int size)
 {
     FILE* fd = (FILE*)context;
     fwrite(data, size, 1, fd);
 }
+#endif
 
 // Define public interface.
+#if ENABLE_FOPEN==1
 int tje_encode_to_file_at_quality(const char* dest_path,
                                   const int quality,
                                   const int width,
                                   const int height,
                                   const int num_components,
+								  bool Rgb,
                                   const unsigned char* src_data)
 {
     FILE* fd = fopen(dest_path, "wb");
@@ -1200,12 +1212,13 @@ int tje_encode_to_file_at_quality(const char* dest_path,
     }
 
     int result = tje_encode_with_func(tjei_stdlib_func, fd,
-                                      quality, width, height, num_components, src_data);
+                                      quality, width, height, num_components, Rgb, src_data);
 
     result |= 0 == fclose(fd);
 
     return result;
 }
+#endif
 
 int tje_encode_with_func(tje_write_func* func,
                          void* context,
@@ -1213,6 +1226,7 @@ int tje_encode_with_func(tje_write_func* func,
                          const int width,
                          const int height,
                          const int num_components,
+						 bool Rgb,
                          const unsigned char* src_data)
 {
     if (quality < 1 || quality > 3) {
@@ -1260,7 +1274,7 @@ int tje_encode_with_func(tje_write_func* func,
 
     tjei_huff_expand(&state);
 
-    int result = tjei_encode_main(&state, src_data, width, height, num_components);
+    int result = tjei_encode_main(&state, src_data, width, height, num_components, Rgb);
 
     return result;
 }
