@@ -97,7 +97,7 @@ extern "C"
 
 #ifndef TJE_HEADER_GUARD
 #define TJE_HEADER_GUARD
-
+#include <stdbool.h>
 #ifndef ENABLE_FOPEN
 #define ENABLE_FOPEN	1
 #endif
@@ -990,7 +990,7 @@ static int tjei_encode_main(TJEState* state,
 			float  aan_scales_y = 8 * aan_scales[y];
 			for (int x = 0; x < 8; x++) {
 				const	int i = (line)+x;
-				const uint8_t  &zag = tjei_zig_zag[i];
+				const uint8_t  zag = tjei_zig_zag[i];
 				pqt.luma[i] = 1.0f / (aan_scales[x] * aan_scales_y* state->qt_luma[zag]);
 				pqt.chroma[i] = 1.0f / (aan_scales[x] * aan_scales_y * state->qt_chroma[zag]);
 			}
@@ -1127,9 +1127,9 @@ static int tjei_encode_main(TJEState* state,
 					if (col >= width) {
 						src_index -= (col - width + 1) * src_num_components;
 					}
-				 	const unsigned char& r = src_data[src_index + rgb_idx[0]];
-					const unsigned char& g = src_data[src_index + rgb_idx[1]];
-					const unsigned char &b = src_data[src_index + rgb_idx[2]];
+					const unsigned char  r = src_data[src_index + rgb_idx[0]];
+					const unsigned char  g = src_data[src_index + rgb_idx[1]];
+					const unsigned char  b = src_data[src_index + rgb_idx[2]];
 					du_y[block_index] = (float)(((19595 * r + 38470 * g + 7470 * b) >> 16) - 128);
 					du_b[block_index] = (float)((-11056 * r - 21712 * g + 32767 * b) >> 16);
 					du_r[block_index] = (float)((32767 * r - 27440 * g - 5328 * b) >> 16);
@@ -1191,8 +1191,31 @@ int tje_encode_to_file(const char* dest_path,
 					   bool Rgb,
                        const unsigned char* src_data)
 {
-    int res = tje_encode_to_file_at_quality(dest_path, 3, width, height, num_components, Rgb, src_data);
-    return res;
+	if (num_components == 1)
+	{
+		unsigned char*  dst_data = (unsigned char*)malloc(width*height * 3);
+		if (dst_data == NULL) return 0;
+		for (int y = 0; y < height; y++)
+		{
+			const unsigned char*     inLine = src_data + (y * width);
+			unsigned char*     outLine = dst_data + (y * width * 3);
+
+			for (int x = 0; x < width; x++)
+			{
+				outLine[0] = outLine[1] = outLine[2] = inLine[x];
+
+				outLine += 3;
+			}
+		}
+		int res = tje_encode_to_file_at_quality(dest_path, 3, width, height, 3,  Rgb, dst_data);
+		free(dst_data);
+		return res;
+	}
+	else
+	{ 
+		int res = tje_encode_to_file_at_quality(dest_path, 3, width, height, num_components, Rgb, src_data);
+		return res;
+	}
 }
 #endif
 
