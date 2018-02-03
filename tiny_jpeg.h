@@ -1118,6 +1118,15 @@ static int tjei_encode_main(TJEState* state,
 				{
 					int block_index = (off_y << 3) + off_x;
 				 	int src_index = (((y + off_y) * width) + (x + off_x)) * src_num_components;
+				 	int col = x + off_x;
+					int row = y + off_y;
+
+					if (row >= height) {
+						src_index -= (width * (row - height + 1)) * src_num_components;
+					}
+					if (col >= width) {
+						src_index -= (col - width + 1) * src_num_components;
+					}
 				 	const unsigned char& r = src_data[src_index + rgb_idx[0]];
 					const unsigned char& g = src_data[src_index + rgb_idx[1]];
 					const unsigned char &b = src_data[src_index + rgb_idx[2]];
